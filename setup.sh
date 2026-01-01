@@ -4,7 +4,21 @@ set -e
 echo "🚀 Setting up MCP Smart Environment System..."
 
 # Check Python version
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Python 3 not found. Please install Python 3.8+"
+    exit 1
+fi
+
 python_version=$(python3 --version 2>&1 | awk '{print $2}')
+python_major=$(echo $python_version | cut -d. -f1)
+python_minor=$(echo $python_version | cut -d. -f2)
+
+# Check if Python version is 3.8 or higher
+if [ "$python_major" -lt 3 ] || ([ "$python_major" -eq 3 ] && [ "$python_minor" -lt 8 ]); then
+    echo "❌ Python 3.8+ is required. Found version: $python_version"
+    exit 1
+fi
+
 echo "✓ Python version: $python_version"
 
 # Create virtual environment
@@ -27,11 +41,32 @@ pip install --upgrade pip
 echo "📥 Installing dependencies..."
 pip install -r requirements.txt
 
-# Create .env from example if it doesn't exist
+# Create .env from example if it doesn't exist, or create with defaults
 if [ ! -f ".env" ]; then
-    echo "📝 Creating .env file from template..."
-    cp .env.example .env
-    echo "✓ Created .env file (edit if needed)"
+    echo "📝 Creating .env file..."
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+        echo "✓ Created .env file from template (edit if needed)"
+    else
+        echo "⚠️  .env.example not found. Creating .env with default values..."
+        cat > .env << 'EOF'
+# MCP Smart Environment System Configuration
+# Ollama Configuration
+OLLAMA_HOST=http://127.0.0.1:11434
+
+# LLM Model Configuration
+MODEL_NAME=qwen2.5:7b
+
+# Database Configuration
+DATABASE_PATH=data/smart_environment.db
+DATABASE_BACKUP_DIR=data/backups
+ENABLE_DATABASE_LOGGING=false
+
+# Feature Flags
+USE_COMPACT_PROMPT=false
+EOF
+        echo "✓ Created .env file with default values (edit if needed)"
+    fi
 else
     echo "✓ .env file already exists"
 fi

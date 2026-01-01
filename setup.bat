@@ -9,7 +9,33 @@ if errorlevel 1 (
     echo ❌ Python not found. Please install Python 3.8+
     exit /b 1
 )
-echo ✓ Python found
+
+:: Check Python version (must be 3.8+)
+for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
+    set MAJOR=%%a
+    set MINOR=%%b
+)
+:: Validate version: must be 3.8 or higher
+if %MAJOR% LSS 3 (
+    echo ❌ Python 3.8+ is required. Found version: %PYTHON_VERSION%
+    exit /b 1
+)
+if %MAJOR% EQU 3 (
+    :: For Python 3.x, check if minor version is 8 or higher
+    :: Use numeric comparison (LSS works correctly for "8", "9", "10", "11", etc.)
+    if %MINOR% LSS 8 (
+        echo ❌ Python 3.8+ is required. Found version: %PYTHON_VERSION%
+        exit /b 1
+    )
+)
+if %MAJOR% GTR 3 (
+    :: Python 4+ is fine (future-proof)
+    echo ✓ Python found (version %PYTHON_VERSION% - major version %MAJOR%)
+)
+if %MAJOR% EQU 3 (
+    echo ✓ Python found (version %PYTHON_VERSION%)
+)
 
 :: Create virtual environment
 if not exist "venv" (
@@ -31,11 +57,32 @@ python -m pip install --upgrade pip
 echo 📥 Installing dependencies...
 pip install -r requirements.txt
 
-:: Create .env from example
+:: Create .env from example or create with defaults
 if not exist ".env" (
-    echo 📝 Creating .env file from template...
-    copy .env.example .env
-    echo ✓ Created .env file (edit if needed)
+    echo 📝 Creating .env file...
+    if exist ".env.example" (
+        copy .env.example .env
+        echo ✓ Created .env file from template (edit if needed)
+    ) else (
+        echo ⚠️  .env.example not found. Creating .env with default values...
+        (
+            echo # MCP Smart Environment System Configuration
+            echo # Ollama Configuration
+            echo OLLAMA_HOST=http://127.0.0.1:11434
+            echo.
+            echo # LLM Model Configuration
+            echo MODEL_NAME=qwen2.5:7b
+            echo.
+            echo # Database Configuration
+            echo DATABASE_PATH=data/smart_environment.db
+            echo DATABASE_BACKUP_DIR=data/backups
+            echo ENABLE_DATABASE_LOGGING=false
+            echo.
+            echo # Feature Flags
+            echo USE_COMPACT_PROMPT=false
+        ) > .env
+        echo ✓ Created .env file with default values (edit if needed)
+    )
 ) else (
     echo ✓ .env file already exists
 )

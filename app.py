@@ -6,6 +6,8 @@ Single page with room map (left) and chat interface (right).
 import streamlit as st
 import streamlit.components.v1 as components
 import time
+import sys
+from pathlib import Path
 from datetime import datetime, timezone, timedelta, time as dt_time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from core.state import StateManager
@@ -14,7 +16,97 @@ from mcp.router import MCPRouter
 from llm.client import LLMClient
 from services.notification import NotificationService
 from database.manager import DatabaseManager
-from config import ROOMS
+from config import ROOMS, OLLAMA_HOST, MODEL_NAME, DATABASE_PATH, PROJECT_ROOT
+
+
+# ========== DEPENDENCY CHECKS ==========
+def check_dependencies():
+    """Check if critical Python packages are installed."""
+    missing_packages = []
+    
+    try:
+        import ollama
+    except ImportError:
+        missing_packages.append("ollama")
+    
+    try:
+        import streamlit
+    except ImportError:
+        missing_packages.append("streamlit")
+    
+    if missing_packages:
+        st.error(
+            f"❌ **Missing Required Packages**\n\n"
+            f"The following packages are not installed: {', '.join(missing_packages)}\n\n"
+            f"Please install them with:\n"
+            f"```bash\npip install {' '.join(missing_packages)}\n```\n\n"
+            f"Or install all dependencies:\n"
+            f"```bash\npip install -r requirements.txt\n```"
+        )
+        st.stop()
+        return False
+    
+    return True
+
+
+# ========== ENVIRONMENT VALIDATION ==========
+def validate_environment():
+    """
+    Validate the environment and dependencies.
+    Returns dict with validation results.
+    """
+    validation_results = {
+        "all_valid": True,
+        "errors": [],
+        "warnings": []
+    }
+    
+    # Check Python version
+    if sys.version_info < (3, 8):
+        validation_results["all_valid"] = False
+        validation_results["errors"].append(
+            f"Python 3.8+ is required. Current version: {sys.version_info.major}.{sys.version_info.minor}"
+        )
+    
+    # Check database directory
+    db_path = Path(DATABASE_PATH)
+    try:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Test write permissions
+        test_file = db_path.parent / ".write_test"
+        try:
+            test_file.write_text("test")
+            test_file.unlink()
+        except Exception as e:
+            validation_results["all_valid"] = False
+            validation_results["errors"].append(
+                f"Database directory is not writable: {db_path.parent}\nError: {str(e)}"
+            )
+    except Exception as e:
+        validation_results["all_valid"] = False
+        validation_results["errors"].append(
+            f"Cannot create database directory: {db_path.parent}\nError: {str(e)}"
+        )
+    
+    # Check RAG embeddings (warning only, not critical)
+    # Use absolute path based on project root for reliability
+    rag_index = PROJECT_ROOT / "rag" / "embeddings" / "faiss_index.bin"
+    rag_mapping = PROJECT_ROOT / "rag" / "embeddings" / "id_to_chunk.json"
+    if not rag_index.exists() or not rag_mapping.exists():
+        validation_results["warnings"].append(
+            "RAG embeddings not found. RAG functionality will not work.\n"
+            "Expected files:\n"
+            f"- {rag_index}\n"
+            f"- {rag_mapping}\n\n"
+            "These files should be included in the repository."
+        )
+    
+    return validation_results
+
+
+# Check dependencies first
+if not check_dependencies():
+    st.stop()
 
 
 # Initialize components in session state
@@ -42,6 +134,56 @@ if 'mcp_router' not in st.session_state:
 
 if 'llm_client' not in st.session_state:
     st.session_state.llm_client = LLMClient()
+    
+    # Validate Ollama connection and model availability
+    validation = st.session_state.llm_client.validate_connection()
+    if not validation["valid"]:
+        error_msg = validation["message"]
+        if not validation["ollama_accessible"]:
+            st.error(
+                f"❌ **Cannot Connect to Ollama**\n\n"
+                f"{error_msg}\n\n"
+                f"**Please ensure:**\n"
+                f"1. Ollama is installed from https://ollama.ai\n"
+                f"2. Ollama is running\n"
+                f"3. The host URL is correct: `{OLLAMA_HOST}`\n\n"
+                f"**Test connection:**\n"
+                f"```bash\ncurl {OLLAMA_HOST}/api/tags\n```\n\n"
+                f"**Or check if Ollama is running:**\n"
+                f"```bash\nollama list\n```"
+            )
+        elif not validation["model_available"]:
+            st.error(
+                f"❌ **Model Not Found**\n\n"
+                f"{error_msg}\n\n"
+                f"**To install the model:**\n"
+                f"```bash\nollama pull {MODEL_NAME}\n```\n\n"
+                f"**Or check available models:**\n"
+                f"```bash\nollama list\n```"
+            )
+        else:
+            st.error(
+                f"❌ **Ollama Validation Error**\n\n"
+                f"{error_msg}\n\n"
+                f"Please check your Ollama installation and configuration."
+            )
+        st.stop()
+
+# Validate environment (database, RAG files, etc.)
+if 'environment_validated' not in st.session_state:
+    env_validation = validate_environment()
+    st.session_state.environment_validated = True
+    
+    # Show errors (critical issues)
+    if env_validation["errors"]:
+        error_text = "\n\n".join([f"❌ {err}" for err in env_validation["errors"]])
+        st.error(f"**Critical Environment Issues:**\n\n{error_text}")
+        st.stop()
+    
+    # Show warnings (non-critical issues)
+    if env_validation["warnings"]:
+        warning_text = "\n\n".join([f"⚠️ {warn}" for warn in env_validation["warnings"]])
+        st.warning(f"**Environment Warnings:**\n\n{warning_text}")
 
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []

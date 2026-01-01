@@ -158,8 +158,17 @@ class LLMClient:
         Args:
             host: Ollama server host URL
         """
-        self.client = ollama.Client(host=host)
+        self.host = host
         self.model = MODEL_NAME
+        self._connection_error = None
+        
+        # Try to create client, but don't fail if connection fails
+        try:
+            self.client = ollama.Client(host=host)
+        except Exception as e:
+            # Store error but don't raise - allow graceful degradation
+            self._connection_error = str(e)
+            self.client = None
         
         # Pre-compile regex patterns for performance (Phase 1.2: Parsing Optimization)
         self._compiled_patterns = {
@@ -176,6 +185,88 @@ class LLMClient:
             'tool_name': re.compile(r'tool["\']?\s*[:=]\s*["\']?(\w+)', re.IGNORECASE),
             'tool_arguments': re.compile(r'arguments["\']?\s*[:=]\s*(\{.*?\})', re.DOTALL),
         }
+    
+    def validate_connection(self) -> dict:
+        """
+        Validate Ollama connection and model availability.
+        
+        Returns:
+            dict with structure:
+            {
+                "valid": bool,
+                "ollama_accessible": bool,
+                "model_available": bool,
+                "error": str or None,
+                "message": str
+            }
+        """
+        # If we had an initialization error, return it
+        if self._connection_error:
+            return {
+                "valid": False,
+                "ollama_accessible": False,
+                "model_available": False,
+                "error": self._connection_error,
+                "message": f"Failed to initialize Ollama client: {self._connection_error}"
+            }
+        
+        # If client wasn't created, try to create it now
+        if self.client is None:
+            try:
+                self.client = ollama.Client(host=self.host)
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "ollama_accessible": False,
+                    "model_available": False,
+                    "error": str(e),
+                    "message": f"Unable to connect to Ollama at {self.host}. Please ensure Ollama is running."
+                }
+        
+        # Test connection by listing models
+        try:
+            models_response = self.client.list()
+            model_names = [model.get('name', '') for model in models_response.get('models', [])]
+            
+            # Check if required model is available
+            model_available = self.model in model_names
+            
+            if not model_available:
+                return {
+                    "valid": False,
+                    "ollama_accessible": True,
+                    "model_available": False,
+                    "error": f"Model {self.model} not found",
+                    "message": f"Model '{self.model}' is not installed. Please install it with: ollama pull {self.model}"
+                }
+            
+            # Everything is valid
+            return {
+                "valid": True,
+                "ollama_accessible": True,
+                "model_available": True,
+                "error": None,
+                "message": f"Ollama connection validated. Model '{self.model}' is available."
+            }
+            
+        except Exception as e:
+            error_msg = str(e)
+            if "connection" in error_msg.lower() or "failed to connect" in error_msg.lower():
+                return {
+                    "valid": False,
+                    "ollama_accessible": False,
+                    "model_available": False,
+                    "error": error_msg,
+                    "message": f"Unable to connect to Ollama at {self.host}. Please ensure Ollama is running."
+                }
+            else:
+                return {
+                    "valid": False,
+                    "ollama_accessible": False,
+                    "model_available": False,
+                    "error": error_msg,
+                    "message": f"Error validating Ollama connection: {error_msg}"
+                }
     
     def process(self, user_message: str, current_state: dict, chat_history: list = None, recent_notification: dict = None, custom_date: str = None, custom_time: tuple = None, rag_context: dict = None, conversation_summary: dict = None) -> dict:
         """
@@ -218,6 +309,19 @@ class LLMClient:
                 "content": None,
                 "error": None
             }
+        
+        # Check if client is available
+        if self.client is None:
+            # Try to create client if it wasn't created during init
+            try:
+                self.client = ollama.Client(host=self.host)
+            except Exception as e:
+                return {
+                    "tool": "chat_message",
+                    "arguments": {"message": f"Unable to connect to Ollama at {self.host}. Please ensure Ollama is running."},
+                    "content": None,
+                    "error": str(e)
+                }
         
         # Build messages for LLM
         messages = self._build_messages(user_message, current_state, chat_history, recent_notification, custom_date, custom_time, rag_context, conversation_summary)
