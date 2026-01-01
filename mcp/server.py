@@ -1117,7 +1117,7 @@ class MCPServer:
             except ImportError as e:
                 error_msg = str(e)
                 print(f"[RAG] ERROR: Failed to import RAG dependencies: {error_msg}")
-                print("[RAG] HINT: Ensure sentence-transformers and faiss-cpu are installed: pip install sentence-transformers faiss-cpu")
+                print("[RAG] HINT: Ensure sentence-transformers and faiss-cpu are installed in the Docker container")
                 return None
             except Exception as e:
                 error_msg = str(e)

@@ -19,36 +19,6 @@ from database.manager import DatabaseManager
 from config import ROOMS, OLLAMA_HOST, MODEL_NAME, DATABASE_PATH, PROJECT_ROOT
 
 
-# ========== DEPENDENCY CHECKS ==========
-def check_dependencies():
-    """Check if critical Python packages are installed."""
-    missing_packages = []
-    
-    try:
-        import ollama
-    except ImportError:
-        missing_packages.append("ollama")
-    
-    try:
-        import streamlit
-    except ImportError:
-        missing_packages.append("streamlit")
-    
-    if missing_packages:
-        st.error(
-            f"❌ **Missing Required Packages**\n\n"
-            f"The following packages are not installed: {', '.join(missing_packages)}\n\n"
-            f"Please install them with:\n"
-            f"```bash\npip install {' '.join(missing_packages)}\n```\n\n"
-            f"Or install all dependencies:\n"
-            f"```bash\npip install -r requirements.txt\n```"
-        )
-        st.stop()
-        return False
-    
-    return True
-
-
 # ========== ENVIRONMENT VALIDATION ==========
 def validate_environment():
     """
@@ -104,11 +74,6 @@ def validate_environment():
     return validation_results
 
 
-# Check dependencies first
-if not check_dependencies():
-    st.stop()
-
-
 # Initialize components in session state
 if 'db_manager' not in st.session_state:
     try:
@@ -144,22 +109,20 @@ if 'llm_client' not in st.session_state:
                 f"❌ **Cannot Connect to Ollama**\n\n"
                 f"{error_msg}\n\n"
                 f"**Please ensure:**\n"
-                f"1. Ollama is installed from https://ollama.ai\n"
-                f"2. Ollama is running\n"
-                f"3. The host URL is correct: `{OLLAMA_HOST}`\n\n"
-                f"**Test connection:**\n"
-                f"```bash\ncurl {OLLAMA_HOST}/api/tags\n```\n\n"
-                f"**Or check if Ollama is running:**\n"
-                f"```bash\nollama list\n```"
+                f"1. Ollama service is running in Docker\n"
+                f"2. The host URL is correct: `{OLLAMA_HOST}`\n"
+                f"3. Check Ollama service status: `docker compose ps ollama`\n\n"
+                f"**Troubleshooting:**\n"
+                f"```bash\n# Check Ollama logs\ndocker compose logs ollama\n\n# Verify Ollama is healthy\ndocker compose exec ollama ollama list\n```"
             )
         elif not validation["model_available"]:
             st.error(
                 f"❌ **Model Not Found**\n\n"
                 f"{error_msg}\n\n"
-                f"**To install the model:**\n"
-                f"```bash\nollama pull {MODEL_NAME}\n```\n\n"
+                f"**To install the model in Docker:**\n"
+                f"```bash\ndocker compose exec ollama ollama pull {MODEL_NAME}\n```\n\n"
                 f"**Or check available models:**\n"
-                f"```bash\nollama list\n```"
+                f"```bash\ndocker compose exec ollama ollama list\n```"
             )
         else:
             st.error(
@@ -306,8 +269,6 @@ if 'custom_time_set_timestamp' not in st.session_state:
     st.session_state.custom_time_set_timestamp = None  # Timestamp when custom time was set (for calculating elapsed time)
 if 'show_time_modal' not in st.session_state:
     st.session_state.show_time_modal = False  # Whether to show the time customization modal
-if 'show_time_modal' not in st.session_state:
-    st.session_state.show_time_modal = False  # Control modal visibility
 if 'modal_hours' not in st.session_state:
     st.session_state.modal_hours = "8"  # Default hours in modal
 if 'modal_minutes' not in st.session_state:

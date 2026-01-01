@@ -10,39 +10,12 @@ A Streamlit-based smart environment assistant for elderly/disabled users. The sy
 - **Notification System**: Proactive house checks and activity reminders
 - **Natural Language Interface**: Chat-based interaction powered by LLM
 
-## Project Structure
-
-```
-mcp_llm/
-├── app.py                    # Streamlit UI entry point
-├── config.py                 # Configuration constants
-├── requirements.txt          # Python dependencies
-├── core/                     # Core business logic
-│   ├── state.py             # State management
-│   └── activity_derivation.py
-├── mcp/                      # MCP protocol components
-│   ├── server.py            # MCP server implementation
-│   └── router.py            # Tool call router
-├── llm/                      # LLM interaction
-│   ├── client.py            # LLM client
-│   └── prompts.py           # System prompts
-├── services/                  # Application services
-│   └── notification.py      # Notification service
-├── utils/                     # Utilities
-│   └── safety_logger.py     # Safety logging
-└── rag/                      # RAG system
-    ├── data/chunks/         # Health knowledge chunks
-    ├── embeddings/          # FAISS index and mappings
-    └── retrieval/
-        └── retriever.py    # RAG retriever
-```
-
 ## Prerequisites
 
-1. **Python 3.8+**
-2. **Ollama** installed and running
-   - Download from: https://ollama.ai
-   - Required model: `qwen2.5:7b` (or as configured)
+**Docker and Docker Compose are required.** No local Python installation needed.
+
+- **Docker** 20.10+ ([Install Docker](https://docs.docker.com/get-docker/))
+- **Docker Compose** 2.0+ (included with Docker Desktop)
 
 ## Quick Start
 
@@ -51,66 +24,284 @@ mcp_llm/
 git clone <repo-url>
 cd mcp_llm
 
-# Run setup script (recommended)
-# Linux/Mac:
-./setup.sh
-
-# Windows:
-setup.bat
-
-# Or manual setup:
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Configure environment (copy and edit)
+# Copy environment file (optional - defaults work)
 cp .env.example .env
-# Edit .env with your settings (optional - defaults work for localhost)
 
-# Verify Ollama is running
-ollama list  # Should show qwen2.5:7b
-
-# Run the application
-streamlit run app.py
+# Start all services
+docker compose up --build
 ```
 
-The application will open in your default web browser at `http://localhost:8501`
+The application will be available at `http://localhost:8501`
+
+**First Run:** The required model (`qwen2.5:7b`) will be automatically downloaded during startup. This may take a few minutes depending on your internet connection. The model is persisted in a Docker volume, so it only needs to be downloaded once.
+
+## Architecture
+
+The system runs in Docker with the following services:
+
+```
+┌─────────────────┐
+│   Streamlit     │  Port 8501
+│   Application   │  ──────────┐
+└────────┬────────┘              │
+         │                       │
+         │ HTTP                  │ User
+         │                       │ Browser
+┌────────▼────────┐              │
+│     Ollama      │  Port 11434  │
+│   LLM Service   │              │
+└─────────────────┘              │
+                                  │
+┌─────────────────┐              │
+│  SQLite DB      │  Volume      │
+│  (data/)        │  Mount       │
+└─────────────────┘              │
+                                  │
+┌─────────────────┐              │
+│  RAG Embeddings │  Volume      │
+│  (rag/)         │  Mount       │
+└─────────────────┘              │
+```
+
+### Services
+
+1. **app** (Streamlit Application)
+   - Python application serving the web UI
+   - Connects to Ollama service for LLM processing
+   - Uses SQLite database for state persistence
+   - Accesses RAG embeddings for health knowledge
+
+2. **ollama** (LLM Service)
+   - Runs Ollama server for language model inference
+   - Models are persisted in Docker volume `ollama_data`
+
+3. **ollama-init** (Model Initialization)
+   - Automatically checks for and downloads the required model on first run
+   - Runs once after Ollama service is healthy
+   - Skips download if model already exists in the volume
 
 ## Configuration
 
-Configuration is done via environment variables. Copy `.env.example` to `.env` and customize:
+Configuration is done via environment variables in `.env` file.
 
-- `OLLAMA_HOST`: Ollama server URL (default: http://127.0.0.1:11434)
-- `MODEL_NAME`: LLM model name (default: qwen2.5:7b)
-- `DATABASE_PATH`: Path to SQLite database (default: data/smart_environment.db)
-- `ENABLE_DATABASE_LOGGING`: Enable SQL query logging (default: false)
-- `USE_COMPACT_PROMPT`: Use compact prompt format (default: false)
+### Required Variables
+
+- `OLLAMA_HOST`: Ollama service URL (default: `http://ollama:11434` in Docker)
+- `MODEL_NAME`: LLM model name (default: `qwen2.5:7b`)
+
+### Optional Variables
+
+- `DATABASE_PATH`: SQLite database path (default: `data/smart_environment.db`)
+- `DATABASE_BACKUP_DIR`: Backup directory (default: `data/backups`)
+- `ENABLE_DATABASE_LOGGING`: Enable SQL logging (default: `false`)
+- `USE_COMPACT_PROMPT`: Use compact prompts (default: `false`)
+- `STREAMLIT_SERVER_PORT`: Streamlit port (default: `8501`)
+- `STREAMLIT_SERVER_ADDRESS`: Streamlit address (default: `0.0.0.0`)
 
 See `.env.example` for all available options.
 
-For advanced configuration (rooms, devices, default location), edit `config.py` directly.
-
-## RAG System Setup
-
-The RAG system requires pre-generated embeddings. The embeddings should be in `rag/embeddings/`:
-- `faiss_index.bin`: FAISS vector index
-- `id_to_chunk.json`: ID to chunk mapping
-
-These files should be included in the repository. If they are missing, RAG functionality will not work.
-
 ## Usage
 
-1. **Start the app** (see Running the Application)
+1. **Start the system:**
+   ```bash
+   docker compose up --build
+   ```
 
-2. **Interact via chat**:
+2. **Access the application:**
+   - Open `http://localhost:8501` in your browser
+
+3. **Interact via chat:**
    - Ask questions: "What devices are on?"
    - Control devices: "Turn on the light"
    - Manage schedule: "I have a meeting at 14:00"
    - Get health advice: "What should I eat for breakfast?" (if user has health conditions)
 
-3. **Room Map**: Click on rooms in the left panel to change user location
+4. **Room Map**: Click on rooms in the left panel to change user location
 
-4. **Schedule**: View and manage daily schedule items
+5. **Schedule**: View and manage daily schedule items
+
+## Docker Commands
+
+### Start Services
+```bash
+docker compose up --build
+```
+
+### Start in Background
+```bash
+docker compose up -d --build
+```
+
+### View Logs
+```bash
+docker compose logs -f
+```
+
+### Stop Services
+```bash
+docker compose down
+```
+
+### Stop and Remove Volumes
+```bash
+docker compose down -v
+```
+
+### Rebuild After Code Changes
+```bash
+docker compose up --build
+```
+
+### Access Application Container
+```bash
+docker compose exec app bash
+```
+
+### Access Ollama Container
+```bash
+docker compose exec ollama bash
+```
+
+## Data Persistence
+
+- **Database**: Stored in `data/` directory (mounted as volume)
+- **Ollama Models**: Stored in Docker volume `ollama_data`
+- **RAG Embeddings**: Included in image, read-only mount
+
+To reset the database:
+```bash
+docker compose down
+rm -rf data/*.db
+docker compose up --build
+```
+
+## Troubleshooting
+
+### Application Won't Start
+
+**Check service status:**
+```bash
+docker compose ps
+```
+
+**View logs:**
+```bash
+docker compose logs app
+docker compose logs ollama
+```
+
+### Ollama Connection Issues
+
+**Verify Ollama is running:**
+```bash
+docker compose ps ollama
+```
+
+**Check Ollama health:**
+```bash
+docker compose exec ollama curl http://localhost:11434/api/tags
+```
+
+**Verify model is available:**
+```bash
+docker compose exec ollama ollama list
+```
+
+**Check model initialization logs:**
+```bash
+docker compose logs ollama-init
+```
+
+### Port Already in Use
+
+If port 8501 is already in use, change it in `.env`:
+```env
+STREAMLIT_SERVER_PORT=8502
+```
+
+Then update `docker-compose.yml` port mapping:
+```yaml
+ports:
+  - "8502:8501"
+```
+
+### RAG System Not Working
+
+RAG embeddings are included in the repository. If issues occur:
+- Verify `rag/embeddings/faiss_index.bin` exists
+- Verify `rag/embeddings/id_to_chunk.json` exists
+- Check application logs: `docker compose logs app | grep RAG`
+
+### Database Issues
+
+**Reset database:**
+```bash
+docker compose down
+rm -rf data/*.db data/backups/*
+docker compose up --build
+```
+
+**Check database file:**
+```bash
+ls -lh data/*.db
+```
+
+### Build Issues
+
+**Clear Docker cache and rebuild:**
+```bash
+docker compose build --no-cache
+docker compose up
+```
+
+**Check Docker resources:**
+```bash
+docker system df
+docker system prune  # Remove unused resources
+```
+
+## Development
+
+### Project Structure
+
+```
+mcp_llm/
+├── Dockerfile              # Application container definition
+├── docker-compose.yml      # Service orchestration
+├── .dockerignore           # Build exclusions
+├── .env.example            # Environment template
+├── requirements.txt        # Python dependencies
+├── app.py                  # Streamlit UI entry point
+├── config.py               # Configuration constants
+├── core/                   # Core business logic
+├── database/               # Database models and manager
+├── llm/                    # LLM interaction
+├── mcp/                    # MCP protocol components
+├── rag/                    # RAG system
+│   ├── embeddings/        # Pre-computed embeddings
+│   └── retrieval/         # Retrieval logic
+├── services/               # Application services
+└── utils/                  # Utilities
+```
+
+### Making Code Changes
+
+1. Edit code files
+2. Rebuild and restart:
+   ```bash
+   docker compose up --build
+   ```
+
+### Accessing Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f app
+docker compose logs -f ollama
+```
 
 ## Key Components
 
@@ -133,43 +324,6 @@ These files should be included in the repository. If they are missing, RAG funct
 - Uses FAISS for similarity search
 - Provides context-aware health recommendations
 
-## Troubleshooting
-
-### Import Errors
-- Ensure virtual environment is activated
-- Verify all dependencies: `pip list`
-- Check you're in project root directory
-- Reinstall dependencies: `pip install -r requirements.txt`
-
-### Ollama Connection Issues
-- Verify Ollama is running: `ollama list`
-- Check `OLLAMA_HOST` in `.env` (or `config.py`) matches your Ollama instance
-- Ensure the model is installed: `ollama pull qwen2.5:7b`
-- Test connection: `curl http://127.0.0.1:11434/api/tags`
-
-### RAG System Not Working
-- Verify `rag/embeddings/faiss_index.bin` exists
-- Check `rag/embeddings/id_to_chunk.json` is present
-- Ensure `sentence-transformers` and `faiss-cpu` are installed
-- Check file permissions
-
-### Database Issues
-- Ensure `data/` directory exists and is writable
-- Check database path in `.env`
-- If corrupted, delete `data/smart_environment.db` (will recreate)
-
-### Port Already in Use
-- Streamlit default port is 8501
-- Change port: `streamlit run app.py --server.port 8502`
-
-## Development Notes
-
-- The project uses a modular architecture with clear separation of concerns
-- System prompts are in `llm/prompts.py` for easy modification
-- State is persisted in SQLite database (`data/smart_environment.db`)
-- RAG embeddings are pre-computed and stored in `rag/embeddings/`
-- Configuration can be overridden via environment variables (`.env` file)
-
 ## License
 
 [Add your license here]
@@ -177,4 +331,3 @@ These files should be included in the repository. If they are missing, RAG funct
 ## Contact
 
 [Add contact information]
-

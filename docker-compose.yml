@@ -1,0 +1,66 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mcp_llm_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - mcp_network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: mcp_llm_ollama_init
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts/init-ollama-model.sh:/scripts/init-ollama-model.sh:ro
+    networks:
+      - mcp_network
+    environment:
+      - MODEL_NAME=qwen2.5:7b
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["/bin/sh", "/scripts/init-ollama-model.sh"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp_llm_app
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./data:/app/data
+      - ./rag/embeddings:/app/rag/embeddings:ro
+    networks:
+      - mcp_network
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+    driver: local
+
+networks:
+  mcp_network:
+    driver: bridge
+

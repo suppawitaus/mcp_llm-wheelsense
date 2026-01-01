@@ -29,7 +29,6 @@ ENV/
 # IDE
 .vscode/
 .idea/
-.cursor/
 *.swp
 *.swo
 *~
@@ -38,19 +37,34 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Project specific
-*.log
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment
 .env
 .env.local
 .env.*.local
 
-# Database files
+# Database files (will be mounted as volume)
 data/*.db
 data/*.db-journal
 data/backups/*
-!data/.gitkeep
-!data/backups/.gitkeep
 
-# Docker volumes
-ollama_data/
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+README.md
+*.md
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
 

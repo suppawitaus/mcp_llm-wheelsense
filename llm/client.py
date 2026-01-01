@@ -226,7 +226,13 @@ class LLMClient:
         # Test connection by listing models
         try:
             models_response = self.client.list()
-            model_names = [model.get('name', '') for model in models_response.get('models', [])]
+            # Handle both dict-like and object-like responses from ollama client
+            if hasattr(models_response, 'models'):
+                # New ollama client returns ListResponse object with .models attribute
+                model_names = [model.model if hasattr(model, 'model') else getattr(model, 'name', '') for model in models_response.models]
+            else:
+                # Fallback for dict-like response (older API)
+                model_names = [model.get('name', model.get('model', '')) for model in models_response.get('models', [])]
             
             # Check if required model is available
             model_available = self.model in model_names

@@ -11,10 +11,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Model configuration
-# Note: deepseek-r1:latest uses Q4_K_M quantization (4-bit, ~5.2 GB)
-# An explicitly named Q4 variant is available as: deepseek-r1:q4
+# Default model: qwen2.5:7b
+# Model name can be overridden via MODEL_NAME environment variable
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:7b")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+# Default to Docker service name, fallback to localhost for local development
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
 
 # Room and device definitions
 ROOMS = {
