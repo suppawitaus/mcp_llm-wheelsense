@@ -19,10 +19,20 @@ from config import ROOMS
 
 # Initialize components in session state
 if 'db_manager' not in st.session_state:
-    st.session_state.db_manager = DatabaseManager()
+    try:
+        st.session_state.db_manager = DatabaseManager()
+        print("[APP] Database manager initialized successfully")
+    except Exception as e:
+        st.error(f"❌ **Critical Error: Failed to initialize database**\n\n{str(e)}\n\nPlease check:\n- Database path permissions\n- Disk space availability\n- File system access")
+        st.stop()
 
 if 'state_manager' not in st.session_state:
-    st.session_state.state_manager = StateManager(db_manager=st.session_state.db_manager)
+    try:
+        st.session_state.state_manager = StateManager(db_manager=st.session_state.db_manager)
+        print("[APP] State manager initialized successfully")
+    except Exception as e:
+        st.error(f"❌ **Critical Error: Failed to initialize state manager**\n\n{str(e)}\n\nPlease check database connection and try again.")
+        st.stop()
 
 if 'mcp_server' not in st.session_state:
     st.session_state.mcp_server = MCPServer(st.session_state.state_manager)

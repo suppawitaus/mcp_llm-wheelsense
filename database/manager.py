@@ -36,9 +36,13 @@ class DatabaseManager:
         db_path_obj = Path(db_path)
         db_path_obj.parent.mkdir(parents=True, exist_ok=True)
         
+        # Normalize path for cross-platform compatibility (SQLite URLs use forward slashes)
+        # Convert to absolute path and use forward slashes for SQLite connection string
+        db_path_normalized = db_path_obj.resolve().as_posix()
+        
         # Create engine
         self.engine = create_engine(
-            f"sqlite:///{db_path}",
+            f"sqlite:///{db_path_normalized}",
             connect_args={"check_same_thread": False},  # Allow multi-threading
             echo=ENABLE_DATABASE_LOGGING  # SQL debugging
         )
