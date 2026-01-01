@@ -1,0 +1,7 @@
+streamlit
+ollama
+sentence-transformers
+faiss-cpu
+numpy
+sqlalchemy>=2.0.0
+python-dotenv
