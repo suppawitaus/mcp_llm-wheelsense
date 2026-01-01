@@ -1108,8 +1108,24 @@ class MCPServer:
                 from rag.retrieval.retriever import Retriever
                 self._rag_retriever = Retriever()
                 print("[RAG] RAG retriever initialized successfully")
+            except FileNotFoundError as e:
+                error_msg = str(e)
+                print(f"[RAG] ERROR: RAG files not found: {error_msg}")
+                print("[RAG] HINT: Ensure rag/embeddings/faiss_index.bin and rag/embeddings/id_to_chunk.json exist")
+                print("[RAG] HINT: These files should be included in the repository")
+                return None
+            except ImportError as e:
+                error_msg = str(e)
+                print(f"[RAG] ERROR: Failed to import RAG dependencies: {error_msg}")
+                print("[RAG] HINT: Ensure sentence-transformers and faiss-cpu are installed: pip install sentence-transformers faiss-cpu")
+                return None
             except Exception as e:
-                print(f"[RAG] ERROR: Failed to initialize RAG retriever: {e}")
+                error_msg = str(e)
+                print(f"[RAG] ERROR: Failed to initialize RAG retriever: {error_msg}")
+                print(f"[RAG] ERROR Type: {type(e).__name__}")
+                import traceback
+                print(f"[RAG] ERROR Traceback:")
+                traceback.print_exc()
                 return None
         return self._rag_retriever
     
