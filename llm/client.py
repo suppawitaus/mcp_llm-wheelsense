@@ -345,7 +345,7 @@ class LLMClient:
                 options={
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "num_ctx": 16384  # Limit context window for better performance
+                    "num_ctx": 8192  # Reduced context window for 6GB GPU memory constraint
                 }
             )
             

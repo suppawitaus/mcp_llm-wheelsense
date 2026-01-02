@@ -587,6 +587,8 @@ def schedule_check_fragment():
                                                         if result.get("success"):
                                                             print(f"[SCHEDULE CHECK] ✓ Successfully controlled {room} {device} to {state}")
                                                             success_count += 1
+                                                            # Trigger rerun to sync UI toggles with database
+                                                            st.rerun()
                                                         else:
                                                             error_msg = result.get('error', 'Unknown error')
                                                             print(f"[SCHEDULE CHECK] ✗ Failed to control {room} {device}: {error_msg}")
@@ -1088,6 +1090,7 @@ with col1:
     
     # Display device states with interactive toggles
     devices = st.session_state.state_manager.get_all_devices()
+    print(f"[UI DEBUG] Fetched devices from database: {devices}")
     
     for room, room_devices in devices.items():
         # Room header with expander
@@ -1103,23 +1106,91 @@ with col1:
                 # Device row with toggle
                 col_device, col_toggle = st.columns([3, 1])
                 
+                with col_toggle:
+                    # Interactive toggle - Toggle is the single source of truth for display
+                    base_toggle_key = f"toggle_{room}_{device}"
+                    last_db_state_key = f"last_db_{room}_{device}"
+                    
+                    # Get widget state and last known database state
+                    widget_state = st.session_state.get(base_toggle_key)
+                    last_db_state = st.session_state.get(last_db_state_key)
+                    
+                    # Determine if this is a user interaction or external update
+                    # User interaction: widget_state changed from matching last_db_state to a new value
+                    # External update: widget_state doesn't match current database state (and wasn't just changed by user)
+                    is_user_interaction = (last_db_state is not None and 
+                                         widget_state is not None and 
+                                         widget_state != last_db_state and 
+                                         widget_state != state)
+                    needs_sync = (widget_state is not None and 
+                                widget_state != state and 
+                                not is_user_interaction)
+                    
+                    # Store current database state for next comparison
+                    st.session_state[last_db_state_key] = state
+                    
+                    if needs_sync:
+                        # External update - sync toggle to database
+                        print(f"[UI DEBUG] External update detected for {room} {device}: widget={widget_state}, db={state}")
+                        import time
+                        toggle_key = f"{base_toggle_key}_sync_{int(time.time()*1000)}"
+                        if base_toggle_key in st.session_state:
+                            del st.session_state[base_toggle_key]
+                        new_state = st.toggle(
+                            "",
+                            value=state,  # Force database state for sync
+                            key=toggle_key,
+                            label_visibility="collapsed"
+                        )
+                    else:
+                        # Normal operation or user interaction - use stable key
+                        toggle_key = base_toggle_key
+                        new_state = st.toggle(
+                            "",
+                            value=state,  # Default value (used only if widget_state doesn't exist)
+                            key=toggle_key,
+                            label_visibility="collapsed"
+                        )
+                        if is_user_interaction:
+                            print(f"[UI DEBUG] User interaction detected for {room} {device}: widget_state={widget_state}, last_db={last_db_state}, current_db={state}")
+                
                 with col_device:
-                    # Visual status indicator
-                    status_emoji = "🟢" if state else "⚫"
-                    status_text = "**ON**" if state else "**OFF**"
+                    # Visual status indicator - use toggle's state (toggle is source of truth for display)
+                    # This ensures text and toggle always match visually
+                    display_state = new_state  # Use toggle's state for display
+                    status_emoji = "🟢" if display_state else "⚫"
+                    status_text = "**ON**" if display_state else "**OFF**"
                     st.markdown(f"{status_emoji} **{device}** - {status_text}")
                 
-                with col_toggle:
-                    # Interactive toggle
-                    new_state = st.toggle(
-                        "",
-                        value=state,
-                        key=f"toggle_{room}_{device}",
-                        label_visibility="collapsed"
-                    )
-                    
-                    # Update state if changed
-                    if new_state != state:
+                # Handle toggle state changes - bidirectional sync
+                if new_state != state:
+                    if needs_sync:
+                        # Sync issue - toggle still doesn't match database after versioned key reset
+                        # This shouldn't happen, but force rerun as fallback
+                        print(f"[UI DEBUG] Sync incomplete for {room} {device}: toggle={new_state}, db={state}, forcing rerun")
+                        st.rerun()
+                    elif is_user_interaction:
+                        # User interaction - user changed toggle, update database to match toggle
+                        print(f"[UI DEBUG] Toggle changed by user for {room} {device}: {state} -> {new_state}")
+                        action = "ON" if new_state else "OFF"
+                        result = st.session_state.mcp_server.e_device_control(
+                            room, device, action
+                        )
+                        if result["success"]:
+                            # Verify database was actually updated before rerun
+                            # This ensures the update is committed and visible
+                            verify_state = st.session_state.state_manager.get_device_state(room, device)
+                            if verify_state == new_state:
+                                print(f"[UI DEBUG] Database verified: {room} {device} = {verify_state}, rerunning")
+                                st.rerun()
+                            else:
+                                print(f"[UI DEBUG] Database verification failed: expected {new_state}, got {verify_state}, forcing rerun anyway")
+                                st.rerun()
+                        else:
+                            print(f"[UI DEBUG] Database update failed for {room} {device}: {result.get('error', 'Unknown error')}")
+                    else:
+                        # Initial state mismatch (first render) - update database to match toggle
+                        print(f"[UI DEBUG] Initial state mismatch for {room} {device}: toggle={new_state}, db={state}, updating database")
                         action = "ON" if new_state else "OFF"
                         result = st.session_state.mcp_server.e_device_control(
                             room, device, action

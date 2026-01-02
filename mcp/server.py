@@ -436,6 +436,8 @@ class MCPServer:
             print(f"[MCP DEBUG] Verified state after update: {verify_state} (expected: {new_state})")
             if verify_state != new_state:
                 print(f"[MCP ERROR] State mismatch! Expected {new_state}, got {verify_state}")
+            else:
+                print(f"[MCP SUCCESS] State verified correctly: {room_normalized} {device_normalized} = {verify_state}")
         
         if success:
             state_text = "ON" if new_state else "OFF"

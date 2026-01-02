@@ -2,12 +2,21 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: mcp_llm_ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     networks:
       - mcp_network
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
@@ -19,6 +28,13 @@ services:
   ollama-init:
     image: ollama/ollama:latest
     container_name: mcp_llm_ollama_init
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - ollama_data:/root/.ollama
       - ./scripts/init-ollama-model.sh:/scripts/init-ollama-model.sh:ro
@@ -27,6 +43,7 @@ services:
     environment:
       - MODEL_NAME=qwen2.5:7b
       - OLLAMA_HOST=http://ollama:11434
+      - NVIDIA_VISIBLE_DEVICES=all
     entrypoint: ["/bin/sh", "/scripts/init-ollama-model.sh"]
     depends_on:
       ollama:
@@ -44,6 +61,7 @@ services:
       - .env
     environment:
       - OLLAMA_HOST=http://ollama:11434
+      - MODEL_NAME=qwen2.5:7b
     volumes:
       - ./data:/app/data
       - ./rag/embeddings:/app/rag/embeddings:ro
